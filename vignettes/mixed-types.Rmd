@@ -1,0 +1,115 @@
+---
+title: "Imputing mixed numeric and categorical columns"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Imputing mixed numeric and categorical columns}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE,
+                      purl = FALSE)
+```
+
+This vignette walks through an end-to-end imputation of a small mixed
+numeric/categorical data frame, including a comparison of the two
+categorical encodings RDiffPuter supports.
+
+```{r}
+library(RDiffPuter)
+library(torch)
+```
+
+## Toy data
+
+```{r}
+set.seed(2)
+n <- 300
+truth <- data.frame(
+  age      = pmax(18, rnorm(n, 40, 12)),
+  income   = exp(rnorm(n, 10, 0.6)),
+  edu      = factor(sample(c("hs", "ba", "ma", "phd"), n,
+                           replace = TRUE, prob = c(0.4, 0.4, 0.15, 0.05))),
+  region   = factor(sample(c("N", "S", "E", "W", "C"), n, replace = TRUE)),
+  employed = sample(c(TRUE, FALSE), n, replace = TRUE, prob = c(0.7, 0.3))
+)
+
+data <- truth
+# 25% MCAR holes per column
+for (col in names(data)) {
+  miss <- sample.int(n, n * 0.25)
+  data[miss, col] <- NA
+}
+sapply(data, function(x) sum(is.na(x)))
+```
+
+## Binary (DiffPuter-faithful) encoding
+
+```{r}
+device <- if (cuda_is_available()) "cuda" else
+          if (torch::backends_mps_is_available()) "mps" else "cpu"
+
+bin_run <- diffputer_em(
+  data,
+  encoding   = "binary",
+  max_iter   = 3,
+  epochs     = 300,
+  patience   = 60,
+  hidden_dim = 128,
+  batch_size = 64,
+  num_steps  = 20,
+  num_trials = 8,
+  num_resamplings = 5,
+  device     = device,
+  validation_data = truth,
+  verbose    = TRUE
+)
+```
+
+## One-hot encoding
+
+The same call with `encoding = "onehot"` switches the categorical
+representation. The encoded dimension grows because each level becomes its
+own indicator column rather than one bit position.
+
+```{r}
+oh_run <- diffputer_em(
+  data,
+  encoding   = "onehot",
+  max_iter   = 3,
+  epochs     = 300,
+  patience   = 60,
+  hidden_dim = 128,
+  batch_size = 64,
+  num_steps  = 20,
+  num_trials = 8,
+  num_resamplings = 5,
+  device     = device,
+  validation_data = truth,
+  verbose    = TRUE
+)
+```
+
+## Compare
+
+```{r}
+# Categorical accuracy on the held-out cells
+cat_acc <- function(imp) {
+  sapply(c("edu", "region", "employed"), function(col) {
+    miss <- is.na(data[[col]])
+    if (!any(miss)) return(NA_real_)
+    mean(as.character(imp[[col]][miss]) ==
+           as.character(truth[[col]][miss]))
+  })
+}
+rbind(binary = cat_acc(bin_run$imputed),
+      onehot = cat_acc(oh_run$imputed))
+```
+
+`encoded_dim` for both:
+
+```{r}
+c(binary = bin_run$transformer$encoded_dim,
+  onehot = oh_run$transformer$encoded_dim)
+```

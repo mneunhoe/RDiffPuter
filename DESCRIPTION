@@ -1,0 +1,30 @@
+Package: RDiffPuter
+Type: Package
+Title: Diffusion-Based Imputation of Missing Tabular Data
+Version: 0.1.0
+Authors@R: c(
+    person("Marcel", "Neunhoeffer", email = "marcel@marcel-neunhoeffer.com",
+           role = c("aut", "cre")))
+Description: An R port of the DiffPuter algorithm (Zhang et al., ICLR 2025)
+    for missing-value imputation of tabular data using a diffusion model
+    trained inside an Expectation-Maximisation (EM) loop. Accepts arbitrary
+    data frames with continuous and categorical columns, detects missingness
+    from 'NA', and runs on CPU, CUDA, or Apple Silicon (MPS) via the 'torch'
+    package.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+Imports:
+    cli,
+    R6,
+    torch
+Suggests:
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown
+RoxygenNote: 7.3.3
+Roxygen: list(markdown = TRUE)
+Config/testthat/edition: 3
+VignetteBuilder: knitr
+URL: https://github.com/mneunhoe/RDiffPuter
+BugReports: https://github.com/mneunhoe/RDiffPuter/issues

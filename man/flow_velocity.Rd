@@ -17,6 +17,6 @@ flow_velocity(net, x, t)
 Velocity tensor of shape \verb{(B, D)}.
 }
 \description{
-Convenience accessor: returns \code{v_θ(x, t)} for a \code{\link[=flow_model]{flow_model()}}
+Convenience accessor: returns \code{v_theta(x, t)} for a \code{\link[=flow_model]{flow_model()}}
 wrapper. \code{t} may be a scalar or a length-\code{B} 1-D tensor.
 }

@@ -38,7 +38,7 @@ flow_model <- torch::nn_module(
 
 #' @title Velocity field of a flow-matching model
 #'
-#' @description Convenience accessor: returns `v_θ(x, t)` for a [flow_model()]
+#' @description Convenience accessor: returns `v_theta(x, t)` for a [flow_model()]
 #'   wrapper. `t` may be a scalar or a length-`B` 1-D tensor.
 #'
 #' @param net A [flow_model()] instance.

@@ -16,7 +16,7 @@ A torch tensor of shape \verb{(B, D)} of unreduced squared errors.
 }
 \description{
 Per-element MSE between the predicted velocity
-\code{v_θ(x_t, t)} and the analytic velocity \code{x_1 - x_0} of the linear
+\code{v_theta(x_t, t)} and the analytic velocity \code{x_1 - x_0} of the linear
 interpolant \code{x_t = (1 - t) * x_0 + t * x_1}. Direct port of the loss in
 Lipman et al. (2023, "Flow Matching for Generative Modeling").
 }

@@ -72,9 +72,27 @@ head(result$imputed)
 | `diffputer_trainer()` | Train one diffusion denoiser (single M-step). |
 | `impute()` | Run the E-step on new data with a trained model. |
 | `save_diffputer()` / `load_diffputer()` | Persist a trained model + transformer. |
+| `multi_impute()` | Draw `m` completed data sets from a trained model. |
+| `diffputer_em_mi()` | One-call: train + draw `m` completed data sets. |
 
-See `vignette("getting-started")` and `vignette("mixed-types")` for worked
-examples.
+See `vignette("getting-started")`, `vignette("mixed-types")`,
+`vignette("flow-matching")`, and `vignette("multiple-imputation")` for
+worked examples.
+
+## Multiple imputation
+
+For valid statistical inference, draw `m` completed data sets and pool with
+Rubin's rules (e.g. via `mice::pool()`):
+
+```r
+res  <- diffputer_em_mi(data, m = 10, max_iter = 5)
+fits <- lapply(res$imputations, function(d) lm(y ~ x1 + x2, data = d))
+summary(mice::pool(fits))
+```
+
+By default each completed data set is one posterior draw (`num_trials = 1`),
+so between-draw variability captures the model's uncertainty about each
+missing entry.
 
 ## License
 

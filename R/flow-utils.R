@@ -1,7 +1,7 @@
 #' @title Flow-matching training loss
 #'
 #' @description Per-element MSE between the predicted velocity
-#'   `v_θ(x_t, t)` and the analytic velocity `x_1 - x_0` of the linear
+#'   `v_theta(x_t, t)` and the analytic velocity `x_1 - x_0` of the linear
 #'   interpolant `x_t = (1 - t) * x_0 + t * x_1`. Direct port of the loss in
 #'   Lipman et al. (2023, "Flow Matching for Generative Modeling").
 #'

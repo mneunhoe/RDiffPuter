@@ -1,0 +1,108 @@
+---
+title: "Multiple imputation with RDiffPuter"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Multiple imputation with RDiffPuter}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE,
+                      purl = FALSE)
+```
+
+Single imputation gives you a point prediction for each missing cell —
+useful for downstream prediction tasks, but it discards the model's
+uncertainty about the missing values. For statistical inference you usually
+want **multiple imputation**: produce `m` completed data sets, fit an
+analysis model on each, and pool the results with Rubin's rules to recover
+valid standard errors.
+
+`RDiffPuter` exposes this through two functions:
+
+- `multi_impute(model, data, transformer, m)` — given an already-trained
+  model, draw `m` completed data sets.
+- `diffputer_em_mi(data, m, ...)` — train and draw in one call.
+
+```{r}
+library(RDiffPuter)
+library(torch)
+device <- if (cuda_is_available()) "cuda" else
+          if (torch::backends_mps_is_available()) "mps" else "cpu"
+```
+
+## A toy data set with missing entries
+
+```{r}
+set.seed(1)
+n <- 300
+truth <- data.frame(
+  x1 = rnorm(n),
+  x2 = rnorm(n),
+  y  = NA_real_
+)
+truth$y <- 1.5 + 0.7 * truth$x1 - 0.3 * truth$x2 + rnorm(n, sd = 0.5)
+
+data <- truth
+data$x1[sample.int(n, 60)] <- NA
+data$x2[sample.int(n, 60)] <- NA
+```
+
+## Train and draw with `diffputer_em_mi()`
+
+```{r}
+res <- diffputer_em_mi(
+  data, m = 10,
+  max_iter   = 3, epochs = 200, hidden_dim = 64,
+  batch_size = 64, patience = 50,
+  num_steps  = 20, num_resamplings = 5, num_trials = 4,
+  mi_num_trials = 1,        # one Monte Carlo sample per completed dataset
+  mi_num_steps  = 20,
+  device     = device, verbose = TRUE
+)
+length(res$imputations)
+print(res)
+```
+
+## Pool with `mice::pool()`
+
+```{r}
+fits <- lapply(res$imputations, function(d) lm(y ~ x1 + x2, data = d))
+summary(mice::pool(fits))
+```
+
+Compare with the (over-confident) single-imputation result:
+
+```{r}
+em_single <- diffputer_em(
+  data, max_iter = 3, epochs = 200, hidden_dim = 64,
+  batch_size = 64, patience = 50,
+  num_steps = 20, num_resamplings = 5, num_trials = 16,
+  device = device, verbose = TRUE
+)
+summary(lm(y ~ x1 + x2, data = em_single$imputed))
+```
+
+The pooled standard errors will be larger — that's the point of MI. The
+difference quantifies how much uncertainty the imputer was hiding.
+
+## Reusing a trained model
+
+If you already have a `RDiffPuter_em` object (e.g. from a previous run),
+`multi_impute()` lets you draw additional data sets without retraining:
+
+```{r}
+mi_more <- multi_impute(em_single, data, m = 20, seed = 99,
+                        num_steps = 20, num_resamplings = 5)
+length(mi_more)
+```
+
+## Tuning the within-draw / between-draw trade-off
+
+By default `num_trials = 1` per draw, which gives Rubin-style posterior
+samples and faithful between-draw variance. Increasing `num_trials`
+averages multiple sampling passes per completed dataset, which lowers
+within-dataset noise but **also** reduces between-dataset variability and
+can lead to optimistic pooled standard errors. Stick to `num_trials = 1`
+unless you have a reason to deviate.

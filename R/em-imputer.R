@@ -17,15 +17,23 @@
 #' @param data A data frame whose missing entries are encoded as `NA`.
 #'   Continuous columns must be numeric; categorical columns are auto-detected
 #'   from `factor`, `character`, or `logical` types.
+#' @param method Generative model. `"edm"` (default, DiffPuter-faithful) or
+#'   `"flow"` (flow matching with linear interpolant). Flow models use fewer
+#'   sampling steps with comparable quality on most tabular data.
 #' @param max_iter Number of EM iterations.
 #' @param epochs Maximum training epochs per M-step.
 #' @param patience Early-stopping patience (epochs without loss improvement).
 #' @param hidden_dim Hidden width of the MLP denoiser.
 #' @param batch_size Mini-batch size during training.
 #' @param base_lr Adam learning rate.
-#' @param num_steps Outer denoising steps per E-step trial.
+#' @param num_steps Outer denoising / Euler steps per E-step trial. Defaults
+#'   to 50 for EDM, 10 for flow when left `NULL`.
 #' @param num_trials Independent reconstruction trials averaged in each E-step.
-#' @param num_resamplings Inner RePaint iterations per outer step.
+#'   Defaults to 20 (EDM) / 10 (flow) when left `NULL`.
+#' @param num_resamplings Inner RePaint iterations per outer step. Defaults to
+#'   20 (EDM) / 5 (flow) when left `NULL`.
+#' @param resample_strategy For `method = "flow"` only: `"repaint"` (default,
+#'   inner re-flow loop) or `"single"` (one Euler step per outer step).
 #' @param discrete_columns Optional character vector of column names to treat as
 #'   discrete; otherwise auto-detected.
 #' @param encoding Categorical encoding, `"binary"` (default, DiffPuter-faithful)
@@ -66,15 +74,17 @@
 #'   head(result$imputed)
 #' }
 diffputer_em <- function(data,
+                         method = "edm",
                          max_iter = 10L,
                          epochs = 10000L,
                          patience = 500L,
                          hidden_dim = 1024L,
                          batch_size = 4096L,
                          base_lr = 1e-4,
-                         num_steps = 50L,
-                         num_trials = 20L,
-                         num_resamplings = 20L,
+                         num_steps = NULL,
+                         num_trials = NULL,
+                         num_resamplings = NULL,
+                         resample_strategy = "repaint",
                          discrete_columns = NULL,
                          encoding = "binary",
                          device = "cpu",
@@ -82,6 +92,12 @@ diffputer_em <- function(data,
                          checkpoint_path = NULL,
                          validation_data = NULL,
                          verbose = TRUE) {
+  method <- validate_method(method)
+  resample_strategy <- validate_resample_strategy(resample_strategy)
+  defaults <- .impute_defaults(method)
+  num_steps <- num_steps %||% defaults$num_steps
+  num_trials <- num_trials %||% defaults$num_trials
+  num_resamplings <- num_resamplings %||% defaults$num_resamplings
   validate_data_frame_with_na(data, "data", require_na = TRUE)
   validate_positive_integer(max_iter, "max_iter")
   validate_positive_integer(num_trials, "num_trials")
@@ -113,6 +129,7 @@ diffputer_em <- function(data,
 
     trained <- diffputer_trainer(
       x = current_x,
+      method = method,
       hidden_dim = hidden_dim,
       epochs = epochs,
       batch_size = batch_size,
@@ -130,6 +147,7 @@ diffputer_em <- function(data,
       num_trials = num_trials,
       num_steps = num_steps,
       num_resamplings = num_resamplings,
+      resample_strategy = resample_strategy,
       device = device
     )
 
@@ -158,6 +176,8 @@ diffputer_em <- function(data,
     transformer = transformer,
     history = history,
     settings = list(
+      method = method,
+      resample_strategy = resample_strategy,
       max_iter = max_iter, epochs = epochs, patience = patience,
       hidden_dim = hidden_dim, batch_size = batch_size, base_lr = base_lr,
       num_steps = num_steps, num_trials = num_trials,
@@ -183,7 +203,8 @@ diffputer_em <- function(data,
 #' @export
 print.RDiffPuter_em <- function(x, ...) {
   cat("<RDiffPuter_em>\n")
-  cat(sprintf("  iterations: %d, encoded_dim: %d\n",
+  cat(sprintf("  method: %s, iterations: %d, encoded_dim: %d\n",
+              x$settings$method %||% "edm",
               length(x$history$loss), x$transformer$encoded_dim))
   cat(sprintf("  final training loss: %.4f\n",
               utils::tail(x$history$loss, 1L)))

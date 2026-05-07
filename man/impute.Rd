@@ -11,9 +11,10 @@ impute(object, data, transformer, ...)
   object,
   data,
   transformer,
-  num_trials = 20L,
-  num_steps = 50L,
-  num_resamplings = 20L,
+  num_trials = NULL,
+  num_steps = NULL,
+  num_resamplings = NULL,
+  resample_strategy = "repaint",
   device = NULL,
   ...
 )
@@ -34,7 +35,12 @@ used as the imputation. Higher values reduce sampling variance.}
 
 \item{num_steps}{Number of outer denoising steps per trial.}
 
-\item{num_resamplings}{Inner RePaint iterations per outer step.}
+\item{num_resamplings}{Inner RePaint iterations per outer step. For
+flow-trained models with \code{resample_strategy = "single"} this is ignored.}
+
+\item{resample_strategy}{For flow-trained models: \code{"repaint"} (default,
+inner re-flow loop) or \code{"single"} (one Euler step per outer step). Has
+no effect when the model was trained with \code{method = "edm"}.}
 
 \item{device}{Device to run sampling on. Defaults to whatever the model was
 trained on.}

@@ -74,21 +74,29 @@ load_diffputer <- function(path, device = "cpu") {
   meta <- readRDS(meta_path)
 
   s <- meta$trained_settings
+  method <- s$method %||% "edm"
   denoiser <- mlp_diffusion(d_in = s$d_in, dim_t = s$hidden_dim)
-  model <- diffputer_model(
-    denoise_fn = denoiser,
-    P_mean = s$P_mean, P_std = s$P_std, sigma_data = s$sigma_data
-  )$to(device = device)
+  model <- if (method == "flow") {
+    flow_model(denoise_fn = denoiser)$to(device = device)
+  } else {
+    diffputer_model(
+      denoise_fn = denoiser,
+      P_mean = s$P_mean, P_std = s$P_std, sigma_data = s$sigma_data
+    )$to(device = device)
+  }
   state <- torch::torch_load(state_path)
   model$load_state_dict(state)
 
+  net_handle <- if (method == "flow") model else model$denoise_fn_D
+
   trained <- list(
     model = model,
-    denoiser = model$denoise_fn_D,
+    net = net_handle,
+    denoiser = if (method == "edm") model$denoise_fn_D else NULL,
     optimizer = NULL,
     losses = numeric(0),
     best_loss = NA_real_,
-    settings = utils::modifyList(s, list(device = device))
+    settings = utils::modifyList(s, list(device = device, method = method))
   )
   class(trained) <- "trained_RDiffPuter"
 

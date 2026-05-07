@@ -96,6 +96,36 @@ detect_discrete_columns <- function(data) {
   names(data)[is_discrete]
 }
 
+#' @title Default sampling budgets per generative method
+#'
+#' @description Internal helper. Returns the recommended `num_trials`,
+#'   `num_steps`, and `num_resamplings` for the EDM and flow imputers when the
+#'   user does not override them. Flow defaults are roughly five times
+#'   cheaper, reflecting the straighter ODE trajectories.
+#'
+#' @param method `"edm"` or `"flow"`.
+#' @return A named list.
+#' @keywords internal
+.impute_defaults <- function(method) {
+  if (identical(method, "flow")) {
+    list(num_trials = 10L, num_steps = 10L, num_resamplings = 5L)
+  } else {
+    list(num_trials = 20L, num_steps = 50L, num_resamplings = 20L)
+  }
+}
+
+#' @title NULL-coalescing operator
+#'
+#' @description Returns `lhs` if it is non-`NULL`, otherwise `rhs`. Lifted from
+#'   common R idioms to keep argument-defaulting code readable.
+#'
+#' @param lhs Left-hand side.
+#' @param rhs Right-hand side.
+#' @return One of the operands.
+#' @keywords internal
+#' @name grapes-or-or-grapes
+`%||%` <- function(lhs, rhs) if (is.null(lhs)) rhs else lhs
+
 #' @title Replicate a column-wise mask to match a wider encoded dimension
 #'
 #' @description Given a per-original-column mask and a vector giving the encoded

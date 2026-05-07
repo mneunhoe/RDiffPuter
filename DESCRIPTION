@@ -1,7 +1,7 @@
 Package: RDiffPuter
 Type: Package
 Title: Diffusion-Based Imputation of Missing Tabular Data
-Version: 0.1.0
+Version: 0.2.0
 Authors@R: c(
     person("Marcel", "Neunhoeffer", email = "marcel@marcel-neunhoeffer.com",
            role = c("aut", "cre")))

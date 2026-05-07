@@ -6,15 +6,17 @@
 \usage{
 diffputer_em(
   data,
+  method = "edm",
   max_iter = 10L,
   epochs = 10000L,
   patience = 500L,
   hidden_dim = 1024L,
   batch_size = 4096L,
   base_lr = 1e-04,
-  num_steps = 50L,
-  num_trials = 20L,
-  num_resamplings = 20L,
+  num_steps = NULL,
+  num_trials = NULL,
+  num_resamplings = NULL,
+  resample_strategy = "repaint",
   discrete_columns = NULL,
   encoding = "binary",
   device = "cpu",
@@ -29,6 +31,10 @@ diffputer_em(
 Continuous columns must be numeric; categorical columns are auto-detected
 from \code{factor}, \code{character}, or \code{logical} types.}
 
+\item{method}{Generative model. \code{"edm"} (default, DiffPuter-faithful) or
+\code{"flow"} (flow matching with linear interpolant). Flow models use fewer
+sampling steps with comparable quality on most tabular data.}
+
 \item{max_iter}{Number of EM iterations.}
 
 \item{epochs}{Maximum training epochs per M-step.}
@@ -41,11 +47,17 @@ from \code{factor}, \code{character}, or \code{logical} types.}
 
 \item{base_lr}{Adam learning rate.}
 
-\item{num_steps}{Outer denoising steps per E-step trial.}
+\item{num_steps}{Outer denoising / Euler steps per E-step trial. Defaults
+to 50 for EDM, 10 for flow when left \code{NULL}.}
 
-\item{num_trials}{Independent reconstruction trials averaged in each E-step.}
+\item{num_trials}{Independent reconstruction trials averaged in each E-step.
+Defaults to 20 (EDM) / 10 (flow) when left \code{NULL}.}
 
-\item{num_resamplings}{Inner RePaint iterations per outer step.}
+\item{num_resamplings}{Inner RePaint iterations per outer step. Defaults to
+20 (EDM) / 5 (flow) when left \code{NULL}.}
+
+\item{resample_strategy}{For \code{method = "flow"} only: \code{"repaint"} (default,
+inner re-flow loop) or \code{"single"} (one Euler step per outer step).}
 
 \item{discrete_columns}{Optional character vector of column names to treat as
 discrete; otherwise auto-detected.}

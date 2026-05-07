@@ -6,6 +6,7 @@
 \usage{
 diffputer_trainer(
   x,
+  method = "edm",
   hidden_dim = 1024L,
   epochs = 10000L,
   batch_size = 4096L,
@@ -26,6 +27,11 @@ diffputer_trainer(
 \item{x}{Numeric matrix or torch tensor of shape \verb{(n, d)}. Missing entries
 should already be filled in (e.g. with \code{0} for the first EM iteration, or
 with the previous iteration's reconstructions).}
+
+\item{method}{Generative model. \code{"edm"} (default) trains an EDM diffusion
+denoiser as in the reference DiffPuter; \code{"flow"} trains a flow-matching
+velocity field with linear interpolant noise-to-data paths. Flow models
+typically need fewer sampling steps at imputation time.}
 
 \item{hidden_dim}{Hidden width of the MLP denoiser. Defaults to 1024 to
 match the reference implementation; set lower (e.g. 256) for small data.}
@@ -51,7 +57,8 @@ with a warning if the requested accelerator is unavailable.}
 \item{checkpoint_path}{Optional file path to save the best model
 \code{state_dict()} to disk. If \code{NULL}, the best state is kept in memory only.}
 
-\item{P_mean, P_std, sigma_data}{EDM noise distribution parameters.}
+\item{P_mean, P_std, sigma_data}{EDM noise distribution parameters. Ignored
+when \code{method = "flow"}.}
 
 \item{verbose}{If \code{TRUE}, displays a progress bar with the running loss.}
 }

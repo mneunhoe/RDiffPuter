@@ -13,7 +13,11 @@
 #' @param num_trials Number of independent reconstruction trials whose mean is
 #'   used as the imputation. Higher values reduce sampling variance.
 #' @param num_steps Number of outer denoising steps per trial.
-#' @param num_resamplings Inner RePaint iterations per outer step.
+#' @param num_resamplings Inner RePaint iterations per outer step. For
+#'   flow-trained models with `resample_strategy = "single"` this is ignored.
+#' @param resample_strategy For flow-trained models: `"repaint"` (default,
+#'   inner re-flow loop) or `"single"` (one Euler step per outer step). Has
+#'   no effect when the model was trained with `method = "edm"`.
 #' @param device Device to run sampling on. Defaults to whatever the model was
 #'   trained on.
 #' @param ... Currently unused.
@@ -31,14 +35,21 @@ impute <- function(object, data, transformer, ...) {
 impute.trained_RDiffPuter <- function(object,
                                       data,
                                       transformer,
-                                      num_trials = 20L,
-                                      num_steps = 50L,
-                                      num_resamplings = 20L,
+                                      num_trials = NULL,
+                                      num_steps = NULL,
+                                      num_resamplings = NULL,
+                                      resample_strategy = "repaint",
                                       device = NULL,
                                       ...) {
   if (!inherits(transformer, "data_transformer")) {
     stop("transformer must be a fitted data_transformer", call. = FALSE)
   }
+  method <- object$settings$method %||% "edm"
+  resample_strategy <- validate_resample_strategy(resample_strategy)
+  defaults <- .impute_defaults(method)
+  num_trials <- num_trials %||% defaults$num_trials
+  num_steps <- num_steps %||% defaults$num_steps
+  num_resamplings <- num_resamplings %||% defaults$num_resamplings
   validate_positive_integer(num_trials, "num_trials")
   validate_positive_integer(num_steps, "num_steps")
   validate_positive_integer(num_resamplings, "num_resamplings")
@@ -53,14 +64,22 @@ impute.trained_RDiffPuter <- function(object,
   x_t <- torch::torch_tensor(x_obs, dtype = torch::torch_float())$to(device = device)
   mask_t <- torch::torch_tensor(mask + 0, dtype = torch::torch_float())$to(device = device)
 
-  net <- object$denoiser$to(device = device)
+  net <- (object$net %||% object$denoiser)$to(device = device)
   net$eval()
   reconstructions <- torch::torch_zeros_like(x_t)
   for (trial in seq_len(as.integer(num_trials))) {
-    rec <- impute_mask(net, x_t, mask_t,
+    rec <- if (method == "flow") {
+      flow_impute_mask(net, x_t, mask_t,
                        num_steps = as.integer(num_steps),
                        num_resamplings = as.integer(num_resamplings),
+                       resample_strategy = resample_strategy,
                        device = device)
+    } else {
+      impute_mask(net, x_t, mask_t,
+                  num_steps = as.integer(num_steps),
+                  num_resamplings = as.integer(num_resamplings),
+                  device = device)
+    }
     reconstructions <- reconstructions + rec
   }
   reconstructions <- reconstructions / as.integer(num_trials)

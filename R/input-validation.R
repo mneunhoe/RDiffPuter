@@ -47,3 +47,15 @@ validate_encoding <- function(encoding) {
   encoding <- match.arg(encoding, c("binary", "onehot"))
   encoding
 }
+
+#' @rdname input-validation
+validate_method <- function(method) {
+  method <- match.arg(method, c("edm", "flow"))
+  method
+}
+
+#' @rdname input-validation
+validate_resample_strategy <- function(strategy) {
+  strategy <- match.arg(strategy, c("repaint", "single"))
+  strategy
+}

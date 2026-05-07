@@ -6,6 +6,8 @@
 \alias{validate_positive_number}
 \alias{validate_data_frame_with_na}
 \alias{validate_encoding}
+\alias{validate_method}
+\alias{validate_resample_strategy}
 \title{Shared argument validators for RDiffPuter entry points}
 \usage{
 validate_positive_integer(x, name)
@@ -15,6 +17,10 @@ validate_positive_number(x, name)
 validate_data_frame_with_na(data, name = "data", require_na = FALSE)
 
 validate_encoding(encoding)
+
+validate_method(method)
+
+validate_resample_strategy(strategy)
 }
 \description{
 Internal helpers that throw informative errors for invalid user

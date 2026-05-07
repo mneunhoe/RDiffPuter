@@ -12,6 +12,10 @@ support via the [`torch`](https://torch.mlverse.org/) R package.
 - Handles continuous, factor / character, and logical columns automatically.
 - Two categorical encodings: `"binary"` (DiffPuter-faithful, smaller encoded
   dim) and `"onehot"` (more interpretable).
+- Two generative backbones: `method = "edm"` (default, paper-faithful) or
+  `method = "flow"` (flow matching with linear interpolant — typically
+  needs ~5–10 sampling steps where EDM uses 50). See
+  `vignette("flow-matching")` for the trade-off.
 - Runs on CPU, CUDA, or Apple Silicon (MPS) with automatic fallback.
 - Two-layer API: a high-level `diffputer_em()` for one-call imputation and
   the lower-level `diffputer_trainer()` + `impute()` pair for power users.

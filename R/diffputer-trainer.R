@@ -9,6 +9,10 @@
 #' @param x Numeric matrix or torch tensor of shape `(n, d)`. Missing entries
 #'   should already be filled in (e.g. with `0` for the first EM iteration, or
 #'   with the previous iteration's reconstructions).
+#' @param method Generative model. `"edm"` (default) trains an EDM diffusion
+#'   denoiser as in the reference DiffPuter; `"flow"` trains a flow-matching
+#'   velocity field with linear interpolant noise-to-data paths. Flow models
+#'   typically need fewer sampling steps at imputation time.
 #' @param hidden_dim Hidden width of the MLP denoiser. Defaults to 1024 to
 #'   match the reference implementation; set lower (e.g. 256) for small data.
 #' @param epochs Maximum number of training epochs.
@@ -23,7 +27,8 @@
 #' @param seed Optional integer seed for R and torch RNGs.
 #' @param checkpoint_path Optional file path to save the best model
 #'   `state_dict()` to disk. If `NULL`, the best state is kept in memory only.
-#' @param P_mean,P_std,sigma_data EDM noise distribution parameters.
+#' @param P_mean,P_std,sigma_data EDM noise distribution parameters. Ignored
+#'   when `method = "flow"`.
 #' @param verbose If `TRUE`, displays a progress bar with the running loss.
 #'
 #' @return A list with class `trained_RDiffPuter` containing:
@@ -49,6 +54,7 @@
 #'                                epochs = 50, batch_size = 64)
 #' }
 diffputer_trainer <- function(x,
+                              method = "edm",
                               hidden_dim = 1024L,
                               epochs = 10000L,
                               batch_size = 4096L,
@@ -63,6 +69,7 @@ diffputer_trainer <- function(x,
                               P_std = 1.2,
                               sigma_data = 0.5,
                               verbose = TRUE) {
+  method <- validate_method(method)
   validate_positive_integer(hidden_dim, "hidden_dim")
   validate_positive_integer(epochs, "epochs")
   validate_positive_integer(batch_size, "batch_size")
@@ -84,10 +91,14 @@ diffputer_trainer <- function(x,
   steps_per_epoch <- max(1L, n %/% effective_batch)
 
   denoiser <- mlp_diffusion(d_in = d, dim_t = as.integer(hidden_dim))
-  model <- diffputer_model(
-    denoise_fn = denoiser,
-    P_mean = P_mean, P_std = P_std, sigma_data = sigma_data
-  )$to(device = device)
+  model <- if (method == "flow") {
+    flow_model(denoise_fn = denoiser)$to(device = device)
+  } else {
+    diffputer_model(
+      denoise_fn = denoiser,
+      P_mean = P_mean, P_std = P_std, sigma_data = sigma_data
+    )$to(device = device)
+  }
   optimizer <- torch::optim_adam(model$parameters, lr = base_lr, weight_decay = 0)
   scheduler <- torch::lr_reduce_on_plateau(
     optimizer, mode = "min",
@@ -150,13 +161,19 @@ diffputer_trainer <- function(x,
 
   if (!is.null(best_state)) model$load_state_dict(best_state)
 
+  # Both wrappers expose the velocity / denoiser through a uniform handle
+  # so downstream samplers don't have to branch on the method.
+  net_handle <- if (method == "flow") model else model$denoise_fn_D
+
   out <- list(
     model = model,
-    denoiser = model$denoise_fn_D,
+    net = net_handle,
+    denoiser = if (method == "edm") model$denoise_fn_D else NULL,
     optimizer = optimizer,
     losses = losses,
     best_loss = best_loss,
     settings = list(
+      method = method,
       hidden_dim = hidden_dim,
       epochs = epochs,
       batch_size = batch_size,
@@ -177,8 +194,9 @@ diffputer_trainer <- function(x,
 #' @export
 print.trained_RDiffPuter <- function(x, ...) {
   cat("<trained_RDiffPuter>\n")
-  cat(sprintf("  d_in: %d, hidden_dim: %d, device: %s\n",
-              x$settings$d_in, x$settings$hidden_dim, x$settings$device))
+  cat(sprintf("  method: %s, d_in: %d, hidden_dim: %d, device: %s\n",
+              x$settings$method, x$settings$d_in,
+              x$settings$hidden_dim, x$settings$device))
   cat(sprintf("  epochs trained: %d, best loss: %.4f\n",
               length(x$losses), x$best_loss))
   invisible(x)

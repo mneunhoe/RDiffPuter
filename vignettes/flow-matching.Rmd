@@ -1,0 +1,123 @@
+---
+title: "Flow matching as an alternative to EDM diffusion"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Flow matching as an alternative to EDM diffusion}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>", eval = FALSE,
+                      purl = FALSE)
+```
+
+`RDiffPuter` ships with two interchangeable generative backbones:
+
+- `method = "edm"` (default): the EDM diffusion model from
+  [Karras et al. (2022)](https://arxiv.org/abs/2206.00364), trained with
+  weighted denoising MSE and sampled with a 2nd-order Heun ODE solver.
+  This is the formulation in the original DiffPuter paper.
+- `method = "flow"`: a flow-matching velocity field from
+  [Lipman et al. (2023)](https://arxiv.org/abs/2210.02747), trained with
+  plain regression on a linear interpolant between Gaussian noise and data,
+  sampled with explicit Euler. Typically needs ~5–10 sampling steps for
+  quality comparable to 50 EDM steps.
+
+This vignette shows how to switch between them and what to expect.
+
+```{r}
+library(RDiffPuter)
+library(torch)
+device <- if (cuda_is_available()) "cuda" else
+          if (torch::backends_mps_is_available()) "mps" else "cpu"
+```
+
+## A small mixed-types data set
+
+```{r}
+set.seed(2)
+n <- 300
+truth <- data.frame(
+  age   = pmax(18, rnorm(n, 40, 12)),
+  inc   = exp(rnorm(n, 10, 0.6)),
+  edu   = factor(sample(c("hs", "ba", "ma", "phd"), n, replace = TRUE)),
+  reg   = factor(sample(c("N", "S", "E", "W", "C"), n, replace = TRUE))
+)
+data <- truth
+for (col in names(data)) {
+  miss <- sample.int(n, n * 0.25)
+  data[miss, col] <- NA
+}
+```
+
+## EDM diffusion
+
+The original recipe. `num_steps = 50`, `num_resamplings = 20`,
+`num_trials = 20` are the recommended defaults; we shrink them here just so
+the vignette completes quickly.
+
+```{r}
+edm_run <- diffputer_em(
+  data, method = "edm",
+  max_iter   = 2, epochs = 200, hidden_dim = 128,
+  batch_size = 64, patience = 50,
+  num_steps  = 30, num_resamplings = 10, num_trials = 8,
+  device     = device, validation_data = truth, verbose = TRUE
+)
+```
+
+## Flow matching
+
+Same call, just `method = "flow"`. Defaults branch automatically to
+`num_steps = 10`, `num_resamplings = 5`, `num_trials = 10` — substantially
+fewer net evaluations per imputation.
+
+```{r}
+flow_run <- diffputer_em(
+  data, method = "flow",
+  max_iter   = 2, epochs = 200, hidden_dim = 128,
+  batch_size = 64, patience = 50,
+  device     = device, validation_data = truth, verbose = TRUE
+)
+```
+
+## Single-step (no inner re-flow)
+
+For the quickest possible flow-imputation, set
+`resample_strategy = "single"` to drop the inner re-flow loop. With
+`num_trials > 1` you still benefit from Monte Carlo averaging across
+trials.
+
+```{r}
+flow_fast <- diffputer_em(
+  data, method = "flow", resample_strategy = "single",
+  max_iter   = 2, epochs = 200, hidden_dim = 128,
+  batch_size = 64, patience = 50,
+  num_trials = 16,
+  device     = device, validation_data = truth, verbose = TRUE
+)
+```
+
+## Comparing wall clock and quality
+
+```{r}
+compare <- rbind(
+  edm       = edm_run$history,
+  flow      = flow_run$history,
+  flow_fast = flow_fast$history
+)
+compare
+```
+
+## What flow matching trades off
+
+The conditional-imputation construction in DiffPuter (Theorem 1 of the
+ICLR 2025 paper) is derived for the diffusion case. The flow-matching
+analogue — mixing the linear-interpolant forward path on observed entries
+with the model's velocity step on missing entries — is a sound *heuristic*
+adaptation, but it does not have the same exactness guarantee. Empirically
+the gap is small for tabular imputation; if your application requires
+provable correctness with respect to the paper's analysis, stick with
+`method = "edm"`. If you need fast inference and mostly care about
+practical quality, `method = "flow"` is the better choice.
